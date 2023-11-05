@@ -1,0 +1,109 @@
+# واجهة المستخدم
+from flask import Flask, render_template, request, jsonify
+
+app = Flask(__name__)
+
+@app.route("/")
+def index():
+    # احصل على استعلام المستخدم
+    query = request.args.get("query")
+
+    # قم بتحليل البيانات باستخدام أداة التحليل
+    results = analyze_data(query)
+
+    # قم بإنشاء تقرير أو رسم بياني
+    report = create_report(results)
+
+    # قم بعرض التقرير أو الرسم البياني
+    return jsonify(report)
+
+# محرك البيانات
+import sqlite3
+
+def connect_to_database():
+    # اتصل بقاعدة البيانات
+    conn = sqlite3.connect("data.db")
+    return conn
+
+def get_data(conn, query):
+    # احصل على البيانات من قاعدة البيانات
+    cursor = conn.cursor()
+    cursor.execute(query)
+    return cursor.fetchall()
+
+# أداة التحليل
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+def analyze_data(query):
+    # قم بتحليل البيانات باستخدام Pandas
+    df = pd.DataFrame(get_data(connect_to_database(), query))
+
+    # قم بإنشاء رؤى
+    insights = {}
+
+    # عدد الصفوف
+    insights["عدد الصفوف"] = len(df)
+
+    # متوسط العمر
+    insights["متوسط العمر"] = df["age"].mean()
+
+    # الدخل السنوي
+    insights["الدخل السنوي"] = df["income"].sum()
+
+    # تحليلات أكثر تقدمًا
+
+    # توزيع العمر
+    insights["توزيع العمر"] = df["age"].hist()
+
+    # توزيع الدخل
+    insights["توزيع الدخل"] = df["income"].hist()
+
+    # علاقة العمر بالدخل
+    insights["علاقة العمر بالدخل"] = df.plot(x="age", y="income", kind="scatter")
+
+    return insights
+
+# قم بتشغيل التطبيق
+if __name__ == "__main__":
+    app.run(debug=True)
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Python application
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: Test with pytest
+      run: |
+        pytest
