@@ -135,6 +135,9 @@ class FunctionsErrorCode(str, _enum.Enum):
     Unrecoverable data loss or corruption.
     """
 
+    def __str__(self) -> str:
+        return self.value
+
 
 class _CanonicalErrorCodeName(str, _enum.Enum):
     """The canonical error code name for a given error code."""
@@ -156,6 +159,9 @@ class _CanonicalErrorCodeName(str, _enum.Enum):
     INTERNAL = "INTERNAL"
     UNAVAILABLE = "UNAVAILABLE"
     DATA_LOSS = "DATA_LOSS"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 @_dataclasses.dataclass(frozen=True)
@@ -280,7 +286,7 @@ class AuthData:
     The interface for Auth tokens verified in Callable functions
     """
 
-    uid: str
+    uid: str | None
     """
     User ID of the ID token.
     """
@@ -346,8 +352,10 @@ _C1 = _typing.Callable[[Request], Response]
 _C2 = _typing.Callable[[CallableRequest[_typing.Any]], _typing.Any]
 
 
-def _on_call_handler(func: _C2, request: Request,
-                     enforce_app_check: bool) -> Response:
+def _on_call_handler(func: _C2,
+                     request: Request,
+                     enforce_app_check: bool,
+                     verify_token: bool = True) -> Response:
     try:
         if not _util.valid_on_call_request(request):
             _logging.error("Invalid request, unable to process.")
@@ -357,7 +365,8 @@ def _on_call_handler(func: _C2, request: Request,
             data=_json.loads(request.data)["data"],
         )
 
-        token_status = _util.on_call_check_tokens(request)
+        token_status = _util.on_call_check_tokens(request,
+                                                  verify_token=verify_token)
 
         if token_status.auth == _util.OnCallTokenState.INVALID:
             raise HttpsError(FunctionsErrorCode.UNAUTHENTICATED,
@@ -377,8 +386,10 @@ def _on_call_handler(func: _C2, request: Request,
         if token_status.auth_token is not None:
             context = _dataclasses.replace(
                 context,
-                auth=AuthData(token_status.auth_token["uid"],
-                              token_status.auth_token),
+                auth=AuthData(
+                    token_status.auth_token["uid"]
+                    if "uid" in token_status.auth_token else None,
+                    token_status.auth_token),
             )
 
         instance_id = request.headers.get("Firebase-Instance-ID-Token")
@@ -392,14 +403,14 @@ def _on_call_handler(func: _C2, request: Request,
                 instance_id_token=request.headers.get(
                     "Firebase-Instance-ID-Token"),
             )
-        result = func(context)
+        result = _core._with_init(func)(context)
         return _jsonify(result=result)
     # Disable broad exceptions lint since we want to handle all exceptions here
     # and wrap as an HttpsError.
     # pylint: disable=broad-except
     except Exception as err:
         if not isinstance(err, HttpsError):
-            _logging.error("Unhandled error", err)
+            _logging.error("Unhandled error: %s", err)
             err = HttpsError(FunctionsErrorCode.INTERNAL, "INTERNAL")
         status = err._http_error_code.status
         return _make_response(_jsonify(error=err._as_dict()), status)
@@ -436,7 +447,7 @@ def on_request(**kwargs) -> _typing.Callable[[_C1], _C1]:
                     methods=options.cors.cors_methods,
                     origins=options.cors.cors_origins,
                 )(func)(request)
-            return func(request)
+            return _core._with_init(func)(request)
 
         _util.set_func_endpoint_attr(
             on_request_wrapped,

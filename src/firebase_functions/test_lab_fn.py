@@ -24,7 +24,7 @@ import enum as _enum
 
 import firebase_functions.private.util as _util
 
-from firebase_functions.core import CloudEvent
+from firebase_functions.core import CloudEvent, _with_init
 from firebase_functions.options import EventHandlerOptions
 
 
@@ -63,6 +63,9 @@ class TestState(str, _enum.Enum):
     The test matrix was not run because the provided inputs are not valid.
     """
 
+    def __str__(self) -> str:
+        return self.value
+
 
 class OutcomeSummary(str, _enum.Enum):
     """
@@ -100,6 +103,9 @@ class OutcomeSummary(str, _enum.Enum):
     """
     All tests were skipped.
     """
+
+    def __str__(self) -> str:
+        return self.value
 
 
 @_dataclasses.dataclass(frozen=True)
@@ -240,7 +246,7 @@ def _event_handler(func: _C1, raw: _ce.CloudEvent) -> None:
         type=event_dict["type"],
     )
 
-    func(event)
+    _with_init(func)(event)
 
 
 @_util.copy_func_kwargs(EventHandlerOptions)
